@@ -1,10 +1,12 @@
 import { INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
+import { AppController } from '../src/app.controller';
+import { AppService } from '../src/app.service';
 import { configureApplication } from '../src/app.setup';
+import { appConfig, validateEnvironment } from '../src/config';
 import { ApiContractController } from './fixtures/api-contract/api-contract.controller';
 
 interface ErrorBody {
@@ -21,8 +23,16 @@ describe('API contract (e2e)', () => {
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-      controllers: [ApiContractController],
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          cache: true,
+          load: [appConfig],
+          validate: validateEnvironment,
+        }),
+      ],
+      controllers: [AppController, ApiContractController],
+      providers: [AppService],
     }).compile();
 
     app = moduleFixture.createNestApplication();
