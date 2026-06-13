@@ -7,7 +7,7 @@ error contract yang konsisten. Fitur bisnis belum diimplementasikan.
 
 ## Status Saat Ini
 
-**Batch 2 — Validation, Serialization, and Error Contract**
+**Batch 3 — PostgreSQL, TypeORM, ERD, Migration, and Safe Test Harness**
 
 ## Ruang Lingkup
 
@@ -30,9 +30,79 @@ Teknologi yang sudah tersedia:
 - Supertest
 - ESLint dan Prettier
 
-PostgreSQL, TypeORM, migrations, JWT authentication, Project CRUD, Task CRUD,
-structured logging, request ID, Redis cache, BullMQ queue, Swagger, Docker, dan
-CI masih direncanakan untuk batch berikutnya.
+Registration, login, password hashing, JWT authentication, Project CRUD, Task
+CRUD, ownership authorization, structured logging, request ID, Redis cache,
+BullMQ queue, Swagger, final Docker application packaging, dan CI masih
+direncanakan untuk batch berikutnya.
+
+## Database
+
+Persistence menggunakan PostgreSQL 17 dan TypeORM. Tiga entity saat ini adalah:
+
+- `UserEntity` untuk tabel `users`;
+- `ProjectEntity` untuk tabel `projects`; dan
+- `TaskEntity` untuk tabel `tasks`.
+
+Relasi database:
+
+```text
+User 1 --- many Projects
+Project 1 --- many Tasks
+```
+
+Penghapusan User yang masih memiliki Project dibatasi oleh foreign key.
+Penghapusan Project menghapus Task anak dengan `ON DELETE CASCADE`. Relation
+loading tidak eager atau lazy dan harus dilakukan secara eksplisit.
+
+Detail lengkap tersedia di [Dokumentasi Skema Database](docs/database/schema.md).
+
+## Menjalankan PostgreSQL
+
+Compose ini hanya menjalankan service PostgreSQL untuk development dan test,
+bukan application container.
+
+```bash
+npm run database:start
+npm run database:status
+npm run database:logs
+npm run database:stop
+```
+
+Image PostgreSQL menggunakan major version yang dipin, named volume, dan
+health check `pg_isready`. Database test dibuat terpisah saat volume pertama
+kali diinisialisasi.
+
+## Migration
+
+```bash
+npm run migration:show
+npm run migration:run
+npm run migration:revert
+npm run migration:generate
+npm run migration:create
+```
+
+TypeORM runtime dan CLI menggunakan builder konfigurasi serta daftar entity
+eksplisit yang sama. `synchronize` dan automatic migration startup tidak
+diaktifkan.
+
+## Test Database
+
+E2E database menggunakan `DATABASE_TEST_NAME`, bukan `DATABASE_NAME`. Test akan
+gagal sebelum cleanup jika nama database test kosong, sama dengan database
+development, atau koneksi mengarah ke database yang tidak diharapkan.
+
+Migration dijalankan sebelum suite database. Cleanup dilakukan dalam urutan:
+
+```text
+tasks
+projects
+users
+```
+
+Setiap Nest application ditutup dengan `await app.close()`. Test database juga
+memastikan DataSource yang dikelola Nest tidak lagi initialized setelah
+aplikasi ditutup.
 
 ## Prasyarat
 
@@ -168,33 +238,46 @@ Setiap E2E suite membuat Nest application sendiri dan menutupnya dengan
 
 ## Environment Variables
 
-| Variable     | Default       | Keterangan                                              |
-| ------------ | ------------- | ------------------------------------------------------- |
-| `NODE_ENV`   | `development` | Pilihan: `development`, `test`, atau `production`       |
-| `PORT`       | `3000`        | Integer dalam rentang port TCP `1-65535`                |
-| `API_PREFIX` | `api/v1`      | Prefix non-empty; slash di awal dan akhir dinormalisasi |
+| Variable             | Default                 | Keterangan                                                     |
+| -------------------- | ----------------------- | -------------------------------------------------------------- |
+| `NODE_ENV`           | `development`           | Pilihan: `development`, `test`, atau `production`              |
+| `PORT`               | `3000`                  | Integer dalam rentang port TCP `1-65535`                       |
+| `API_PREFIX`         | `api/v1`                | Prefix non-empty; slash di awal dan akhir dinormalisasi        |
+| `DATABASE_HOST`      | `localhost`             | Host PostgreSQL                                                |
+| `DATABASE_PORT`      | `5432`                  | Port PostgreSQL                                                |
+| `DATABASE_USER`      | `postgres`              | User lokal PostgreSQL                                          |
+| `DATABASE_PASSWORD`  | `postgres`              | Password lokal; jangan digunakan sebagai credential production |
+| `DATABASE_NAME`      | `nestjs_challenge`      | Database development                                           |
+| `DATABASE_TEST_NAME` | `nestjs_challenge_test` | Database test yang wajib berbeda                               |
+| `DATABASE_POOL_MAX`  | `10`                    | Batas pool antara `1-50`                                       |
+| `DATABASE_SSL`       | `false`                 | Boolean eksplisit `true` atau `false`                          |
 
 Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 
 ## Script npm
 
-| Script                 | Fungsi                                        |
-| ---------------------- | --------------------------------------------- |
-| `npm run start`        | Menjalankan aplikasi                          |
-| `npm run start:dev`    | Menjalankan aplikasi dalam watch mode         |
-| `npm run start:debug`  | Menjalankan aplikasi dalam debug watch mode   |
-| `npm run start:prod`   | Menjalankan hasil build                       |
-| `npm run build`        | Membuat production build                      |
-| `npm run typecheck`    | Memeriksa TypeScript tanpa menghasilkan file  |
-| `npm run lint`         | Memeriksa source dan test tanpa mengubah file |
-| `npm run lint:fix`     | Menerapkan perbaikan lint yang aman           |
-| `npm run format`       | Memformat file yang dikelola Prettier         |
-| `npm run format:check` | Memeriksa format tanpa mengubah file          |
-| `npm run test`         | Menjalankan unit test                         |
-| `npm run test:watch`   | Menjalankan unit test dalam watch mode        |
-| `npm run test:cov`     | Menjalankan unit test dengan laporan coverage |
-| `npm run test:debug`   | Menjalankan unit test dalam debug mode        |
-| `npm run test:e2e`     | Menjalankan E2E test                          |
+| Script                     | Fungsi                                        |
+| -------------------------- | --------------------------------------------- |
+| `npm run start`            | Menjalankan aplikasi                          |
+| `npm run start:dev`        | Menjalankan aplikasi dalam watch mode         |
+| `npm run start:debug`      | Menjalankan aplikasi dalam debug watch mode   |
+| `npm run start:prod`       | Menjalankan hasil build                       |
+| `npm run build`            | Membuat production build                      |
+| `npm run typecheck`        | Memeriksa TypeScript tanpa menghasilkan file  |
+| `npm run lint`             | Memeriksa source dan test tanpa mengubah file |
+| `npm run lint:fix`         | Menerapkan perbaikan lint yang aman           |
+| `npm run format`           | Memformat file yang dikelola Prettier         |
+| `npm run format:check`     | Memeriksa format tanpa mengubah file          |
+| `npm run test`             | Menjalankan unit test                         |
+| `npm run test:watch`       | Menjalankan unit test dalam watch mode        |
+| `npm run test:cov`         | Menjalankan unit test dengan laporan coverage |
+| `npm run test:debug`       | Menjalankan unit test dalam debug mode        |
+| `npm run test:e2e`         | Menjalankan E2E test                          |
+| `npm run migration:show`   | Menampilkan status migration                  |
+| `npm run migration:run`    | Menjalankan migration pending                 |
+| `npm run migration:revert` | Membatalkan migration terakhir                |
+| `npm run database:start`   | Menjalankan service PostgreSQL                |
+| `npm run database:stop`    | Menghentikan service PostgreSQL               |
 
 ## Struktur Proyek
 
@@ -202,9 +285,14 @@ Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 .
 |-- docs/planning/
 |-- docs/api/
+|-- docs/database/
 |-- src/
 |   |-- common/
 |   |-- config/
+|   |-- database/
+|   |-- projects/
+|   |-- tasks/
+|   |-- users/
 |   |-- app.controller.ts
 |   |-- app.module.ts
 |   |-- app.service.ts
@@ -219,6 +307,7 @@ Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 ## Dokumen Perencanaan
 
 - [Error Contract](docs/api/error-contract.md)
+- [Database Schema](docs/database/schema.md)
 - [Scope](docs/planning/scope.md)
 - [Domain Rules](docs/planning/domain-rules.md)
 - [Requirements Matrix](docs/planning/requirements-matrix.md)
