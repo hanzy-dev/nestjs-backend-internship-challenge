@@ -1,22 +1,15 @@
-import { INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Test, TestingModule } from '@nestjs/testing';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
-import { configureApplication } from '../src/app.setup';
+import { runTestMigrations } from './helpers/database-migrations';
+import { createDatabaseTestApplication } from './helpers/create-test-app';
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestExpressApplication;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    configureApplication(app, app.get(ConfigService));
-    await app.init();
+    const testApplication = await createDatabaseTestApplication();
+    app = testApplication.app;
+    await runTestMigrations(testApplication.dataSource);
   });
 
   afterAll(async () => {

@@ -7,8 +7,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"docs/api/**/*.md\" \"*.{json,mjs}\" \".prettierrc\" \"README.md\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"docs/api/**/*.md\" \"*.{json,mjs}\" \".prettierrc\" \"README.md\"",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"docs/api/**/*.md\" \"docs/database/**/*.md\" \"*.{json,mjs,yml,yaml}\" \".prettierrc\" \"README.md\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"docs/api/**/*.md\" \"docs/database/**/*.md\" \"*.{json,mjs,yml,yaml}\" \".prettierrc\" \"README.md\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -20,18 +20,32 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- migration:generate src/database/migrations/InitialSchema -d src/database/data-source.ts",
+    "migration:create": "npm run typeorm -- migration:create src/database/migrations/NewMigration",
+    "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
+    "migration:show": "npm run typeorm -- migration:show -d src/database/data-source.ts",
+    "database:start": "docker compose -f compose.database.yml up -d",
+    "database:stop": "docker compose -f compose.database.yml down",
+    "database:status": "docker compose -f compose.database.yml ps",
+    "database:logs": "docker compose -f compose.database.yml logs postgres"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/typeorm": "^11.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
     "joi": "^18.2.1",
+    "pg": "^8.21.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "typeorm": "^1.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
