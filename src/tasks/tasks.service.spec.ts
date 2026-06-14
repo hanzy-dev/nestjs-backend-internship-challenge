@@ -4,6 +4,7 @@ import { PROJECT_DETAIL_CACHE_INVALIDATOR } from '../projects/cache/project-deta
 import { ProjectStatus } from '../projects/domain/project-status.enum';
 import { ProjectEntity } from '../projects/persistence/project.entity';
 import { ProjectsService } from '../projects/projects.service';
+import { TASK_ACTIVITY_PUBLISHER } from './activity/task-activity-publisher';
 import { TaskPriority } from './domain/task-priority.enum';
 import { TaskStatus } from './domain/task-status.enum';
 import { TaskEntity } from './persistence/task.entity';
@@ -20,6 +21,7 @@ describe('TasksService', () => {
     remove: jest.fn(),
   };
   const invalidator = { invalidate: jest.fn() };
+  const activityPublisher = { publish: jest.fn() };
   let service: TasksService;
 
   beforeEach(async () => {
@@ -33,6 +35,10 @@ describe('TasksService', () => {
         {
           provide: PROJECT_DETAIL_CACHE_INVALIDATOR,
           useValue: invalidator,
+        },
+        {
+          provide: TASK_ACTIVITY_PUBLISHER,
+          useValue: activityPublisher,
         },
       ],
     }).compile();
@@ -56,6 +62,14 @@ describe('TasksService', () => {
     expect(invalidator.invalidate).toHaveBeenCalledWith(
       'owner-id',
       'project-id',
+    );
+    expect(activityPublisher.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'TASK_CREATED',
+        userId: 'owner-id',
+        projectId: 'project-id',
+        taskId: 'task-id',
+      }),
     );
   });
 
@@ -120,6 +134,20 @@ describe('TasksService', () => {
       'owner-id',
       'project-id',
     );
+    expect(activityPublisher.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'TASK_STATUS_CHANGED' }),
+    );
+  });
+
+  it('does not enqueue when an update does not change status', async () => {
+    repository.findByIdAndProject.mockResolvedValue(createTask());
+    repository.save.mockResolvedValue(createTask());
+
+    await service.update('owner-id', 'project-id', 'task-id', {
+      title: 'Updated title',
+    });
+
+    expect(activityPublisher.publish).not.toHaveBeenCalled();
   });
 
   it('deletes a Task and invalidates the parent Project detail', async () => {
@@ -159,6 +187,7 @@ describe('TasksService', () => {
 
       await expect(run()).rejects.toThrow(failure.message);
       expect(invalidator.invalidate).not.toHaveBeenCalled();
+      expect(activityPublisher.publish).not.toHaveBeenCalled();
     },
   );
 });
