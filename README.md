@@ -7,13 +7,13 @@ contract yang konsisten, serta authentication berbasis JWT.
 
 ## Status Saat Ini
 
-**Batch 4 — Authentication Vertical Slice and Auth E2E**
+**Fast-track Batch 5 — Project and Task Management**
 
 ## Ruang Lingkup
 
 Proyek direncanakan sebagai modular monolith dengan dua resource CRUD utama,
-yaitu Project dan Task. Authentication User sudah tersedia, sedangkan Project
-dan Task CRUD belum diimplementasikan.
+yaitu Project dan Task. Authentication, Project CRUD, dan Task CRUD nested
+sudah tersedia dengan ownership berbasis identitas JWT.
 
 Teknologi yang sudah tersedia:
 
@@ -30,14 +30,18 @@ Teknologi yang sudah tersedia:
 - bcrypt password hashing
 - JWT access token dan Passport strategy
 - protected current-user endpoint
+- Project CRUD dengan pagination, filter, dan sorting terbatas
+- Task CRUD nested dengan pagination, filter, dan sorting terbatas
+- ownership query pada Project dan parent Project
+- Project Detail dengan Tasks melalui explicit join
+- invalidation boundary no-op untuk Project Detail
 - Jest
 - Supertest
 - ESLint dan Prettier
 
-Project CRUD, Task CRUD, ownership authorization, structured logging, request
-ID, HTTP hardening, health/readiness endpoint, Redis cache, BullMQ queue,
-Swagger, Postman, final Docker application packaging, dan CI masih direncanakan
-untuk batch berikutnya.
+Structured logging, request ID, HTTP hardening, health/readiness endpoint,
+Redis cache, BullMQ queue, Swagger, Postman, final Docker application
+packaging, dan CI masih direncanakan untuk batch berikutnya.
 
 ## Authentication
 
@@ -65,6 +69,42 @@ belum tersedia.
 
 Detail lengkap tersedia di
 [Dokumentasi Authentication](docs/api/authentication.md).
+
+## Project dan Task
+
+Semua endpoint Project dan Task dilindungi JWT. Project selalu dibatasi dengan
+`ownerId` dari token terverifikasi. Task hanya diproses setelah Parent Project
+terbukti dimiliki User tersebut.
+
+```text
+POST   /api/v1/projects
+GET    /api/v1/projects
+GET    /api/v1/projects/:projectId
+PATCH  /api/v1/projects/:projectId
+DELETE /api/v1/projects/:projectId
+
+POST   /api/v1/projects/:projectId/tasks
+GET    /api/v1/projects/:projectId/tasks
+GET    /api/v1/projects/:projectId/tasks/:taskId
+PATCH  /api/v1/projects/:projectId/tasks/:taskId
+DELETE /api/v1/projects/:projectId/tasks/:taskId
+```
+
+List menggunakan pagination database dengan default `page=1`, `limit=20`, dan
+maksimum `limit=100`. Filter dan kolom sorting menggunakan whitelist. Project
+Detail memuat Tasks melalui satu query dengan explicit join dan urutan
+deterministik, sehingga jumlah query tidak bertambah per Task.
+
+Resource yang tidak ada atau dimiliki User lain menghasilkan
+`404 RESOURCE_NOT_FOUND`. Penghapusan Project menghapus Tasks melalui foreign
+key `ON DELETE CASCADE`.
+
+Project update/delete dan Task create/update/delete memanggil invalidation
+boundary setelah persistence berhasil. Implementasi saat ini no-op; belum ada
+Redis, cache read, cache write, atau cache key.
+
+Detail lengkap tersedia di
+[Dokumentasi Project dan Task](docs/api/projects-and-tasks.md).
 
 ## Database
 
@@ -253,17 +293,20 @@ atau pesan internal. Penjelasan lengkap tersedia di
 
 ## Pengujian
 
-Unit test mencakup konfigurasi environment, metadata aplikasi, formatter
-validation error, exception mapping, database configuration, email
-normalization, password hashing, User service, Auth service, dan JWT strategy.
-E2E test menggunakan PostgreSQL, bcrypt, JWT signing/verification, Passport
-strategy, dan guard yang sebenarnya.
+Unit test mencakup 85 skenario untuk fondasi aplikasi, authentication,
+pagination, mapper response, query join, Project service, Task service, dan
+invalidation ordering. E2E mencakup 60 skenario menggunakan PostgreSQL,
+bcrypt, JWT, Passport, TypeORM, migration, ownership, CRUD, filtering,
+pagination, sorting, Project Detail, dan cascade deletion yang sebenarnya.
 
 ```bash
 npm test
 npm run test:cov
 npm run test:e2e
 npm run test:e2e -- --testPathPatterns=auth.e2e-spec.ts
+npm run test:e2e -- --testPathPatterns=projects.e2e-spec.ts
+npm run test:e2e -- --testPathPatterns=tasks.e2e-spec.ts
+npm run test:e2e -- --testPathPatterns=ownership.e2e-spec.ts
 ```
 
 Setiap E2E suite membuat Nest application sendiri dan menutupnya dengan
@@ -344,6 +387,7 @@ Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 
 - [Error Contract](docs/api/error-contract.md)
 - [Authentication](docs/api/authentication.md)
+- [Project dan Task](docs/api/projects-and-tasks.md)
 - [Database Schema](docs/database/schema.md)
 - [Scope](docs/planning/scope.md)
 - [Domain Rules](docs/planning/domain-rules.md)

@@ -114,8 +114,10 @@ TypeScript.
 ## Relasi dan Query
 
 Relasi tidak menggunakan eager loading, lazy-loading `Promise`, atau broad
-cascade untuk insert dan update. Relasi harus dimuat secara eksplisit oleh
-query pada batch fitur berikutnya.
+cascade untuk insert dan update. Project Detail memuat Tasks secara eksplisit
+melalui `LEFT JOIN` dengan kondisi Project ID dan owner ID pada query yang sama.
+List Project dan Task menggunakan pagination database. Tidak ada repository
+call di dalam loop hasil.
 
 ## Migration
 
@@ -141,7 +143,6 @@ object induk dan menghapus enum setelah tabel dependennya hilang.
 ## Keterbatasan Saat Ini
 
 - Registration, login, JWT, dan password hashing tersedia sejak Batch 4.
-- Belum ada Project dan Task CRUD.
-- Belum ada ownership authorization.
+- Project dan Task CRUD serta ownership authorization tersedia pada Batch 5.
 - Belum ada soft delete atau audit history.
 - Aturan transisi status belum diterapkan.
