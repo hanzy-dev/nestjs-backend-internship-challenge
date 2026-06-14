@@ -14,6 +14,8 @@ export interface EnvironmentVariables {
   DATABASE_TEST_NAME: string;
   DATABASE_POOL_MAX: number;
   DATABASE_SSL: boolean;
+  JWT_SECRET: string;
+  JWT_EXPIRES_IN_SECONDS: number;
 }
 
 const environmentSchema = Joi.object<EnvironmentVariables>({
@@ -37,6 +39,8 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
     .falsy('false')
     .sensitive()
     .default(false),
+  JWT_SECRET: Joi.string().min(32).required(),
+  JWT_EXPIRES_IN_SECONDS: Joi.number().integer().min(1).max(86400).default(900),
 }).unknown(true);
 
 export function normalizeApiPrefix(prefix: string): string {
@@ -77,7 +81,9 @@ export function validateEnvironment(
     typeof value.DATABASE_NAME !== 'string' ||
     typeof value.DATABASE_TEST_NAME !== 'string' ||
     typeof value.DATABASE_POOL_MAX !== 'number' ||
-    typeof value.DATABASE_SSL !== 'boolean'
+    typeof value.DATABASE_SSL !== 'boolean' ||
+    typeof value.JWT_SECRET !== 'string' ||
+    typeof value.JWT_EXPIRES_IN_SECONDS !== 'number'
   ) {
     throw new Error('Environment validation failed: unexpected schema output');
   }
@@ -104,6 +110,8 @@ export function validateEnvironment(
     DATABASE_TEST_NAME: value.DATABASE_TEST_NAME,
     DATABASE_POOL_MAX: value.DATABASE_POOL_MAX,
     DATABASE_SSL: value.DATABASE_SSL,
+    JWT_SECRET: value.JWT_SECRET,
+    JWT_EXPIRES_IN_SECONDS: value.JWT_EXPIRES_IN_SECONDS,
   };
 }
 
