@@ -2,18 +2,18 @@
 
 Repositori ini berisi fondasi Project and Task Management REST API. Aplikasi
 saat ini menyediakan bootstrap NestJS, konfigurasi terpusat, validasi
-environment, API prefix, global runtime validation, safe serialization, serta
-error contract yang konsisten. Fitur bisnis belum diimplementasikan.
+environment, API prefix, global runtime validation, safe serialization, error
+contract yang konsisten, serta authentication berbasis JWT.
 
 ## Status Saat Ini
 
-**Batch 3 — PostgreSQL, TypeORM, ERD, Migration, and Safe Test Harness**
+**Batch 4 — Authentication Vertical Slice and Auth E2E**
 
 ## Ruang Lingkup
 
 Proyek direncanakan sebagai modular monolith dengan dua resource CRUD utama,
-yaitu Project dan Task. Batch ini membangun kontrak API global sebelum
-authentication dan CRUD, tanpa mengimplementasikan domain bisnis.
+yaitu Project dan Task. Authentication User sudah tersedia, sedangkan Project
+dan Task CRUD belum diimplementasikan.
 
 Teknologi yang sudah tersedia:
 
@@ -26,14 +26,45 @@ Teknologi yang sudah tersedia:
 - transformasi DTO eksplisit dengan `class-transformer`
 - global `ClassSerializerInterceptor`
 - global exception filter dan error contract
+- registration dan login
+- bcrypt password hashing
+- JWT access token dan Passport strategy
+- protected current-user endpoint
 - Jest
 - Supertest
 - ESLint dan Prettier
 
-Registration, login, password hashing, JWT authentication, Project CRUD, Task
-CRUD, ownership authorization, structured logging, request ID, Redis cache,
-BullMQ queue, Swagger, final Docker application packaging, dan CI masih
-direncanakan untuk batch berikutnya.
+Project CRUD, Task CRUD, ownership authorization, structured logging, request
+ID, HTTP hardening, health/readiness endpoint, Redis cache, BullMQ queue,
+Swagger, Postman, final Docker application packaging, dan CI masih direncanakan
+untuk batch berikutnya.
+
+## Authentication
+
+| Method | Path                    | Status | Fungsi                                                |
+| ------ | ----------------------- | ------ | ----------------------------------------------------- |
+| `POST` | `/api/v1/auth/register` | `201`  | Membuat User dengan password yang di-hash             |
+| `POST` | `/api/v1/auth/login`    | `200`  | Memverifikasi credential dan menerbitkan access token |
+| `GET`  | `/api/v1/auth/me`       | `200`  | Mengambil User saat ini dari Bearer token             |
+
+Email dinormalisasi dengan trim dan lowercase tanpa menghapus titik atau plus
+alias. Password di-hash menggunakan bcrypt dengan work factor 10, dibatasi
+hingga 72 byte UTF-8, dan tidak pernah disimpan atau dikembalikan sebagai
+plaintext.
+
+JWT menggunakan `HS256`, hanya membawa claim `sub` berisi UUID User, dan
+diterima melalui:
+
+```text
+Authorization: Bearer <access-token>
+```
+
+Expiration selalu diverifikasi. Unknown email dan password salah menggunakan
+pesan generik yang sama. Refresh token, role, session, dan logout blacklist
+belum tersedia.
+
+Detail lengkap tersedia di
+[Dokumentasi Authentication](docs/api/authentication.md).
 
 ## Database
 
@@ -223,14 +254,16 @@ atau pesan internal. Penjelasan lengkap tersedia di
 ## Pengujian
 
 Unit test mencakup konfigurasi environment, metadata aplikasi, formatter
-validation error, dan exception mapping. E2E test mencakup endpoint bootstrap,
-validasi DTO, penolakan properti asing, nested validation, pemetaan error,
-perlindungan detail internal, dan exclusion field sensitif.
+validation error, exception mapping, database configuration, email
+normalization, password hashing, User service, Auth service, dan JWT strategy.
+E2E test menggunakan PostgreSQL, bcrypt, JWT signing/verification, Passport
+strategy, dan guard yang sebenarnya.
 
 ```bash
 npm test
 npm run test:cov
 npm run test:e2e
+npm run test:e2e -- --testPathPatterns=auth.e2e-spec.ts
 ```
 
 Setiap E2E suite membuat Nest application sendiri dan menutupnya dengan
@@ -238,19 +271,21 @@ Setiap E2E suite membuat Nest application sendiri dan menutupnya dengan
 
 ## Environment Variables
 
-| Variable             | Default                 | Keterangan                                                     |
-| -------------------- | ----------------------- | -------------------------------------------------------------- |
-| `NODE_ENV`           | `development`           | Pilihan: `development`, `test`, atau `production`              |
-| `PORT`               | `3000`                  | Integer dalam rentang port TCP `1-65535`                       |
-| `API_PREFIX`         | `api/v1`                | Prefix non-empty; slash di awal dan akhir dinormalisasi        |
-| `DATABASE_HOST`      | `localhost`             | Host PostgreSQL                                                |
-| `DATABASE_PORT`      | `5432`                  | Port PostgreSQL                                                |
-| `DATABASE_USER`      | `postgres`              | User lokal PostgreSQL                                          |
-| `DATABASE_PASSWORD`  | `postgres`              | Password lokal; jangan digunakan sebagai credential production |
-| `DATABASE_NAME`      | `nestjs_challenge`      | Database development                                           |
-| `DATABASE_TEST_NAME` | `nestjs_challenge_test` | Database test yang wajib berbeda                               |
-| `DATABASE_POOL_MAX`  | `10`                    | Batas pool antara `1-50`                                       |
-| `DATABASE_SSL`       | `false`                 | Boolean eksplisit `true` atau `false`                          |
+| Variable                 | Default                 | Keterangan                                                     |
+| ------------------------ | ----------------------- | -------------------------------------------------------------- |
+| `NODE_ENV`               | `development`           | Pilihan: `development`, `test`, atau `production`              |
+| `PORT`                   | `3000`                  | Integer dalam rentang port TCP `1-65535`                       |
+| `API_PREFIX`             | `api/v1`                | Prefix non-empty; slash di awal dan akhir dinormalisasi        |
+| `DATABASE_HOST`          | `localhost`             | Host PostgreSQL                                                |
+| `DATABASE_PORT`          | `5432`                  | Port PostgreSQL                                                |
+| `DATABASE_USER`          | `postgres`              | User lokal PostgreSQL                                          |
+| `DATABASE_PASSWORD`      | `postgres`              | Password lokal; jangan digunakan sebagai credential production |
+| `DATABASE_NAME`          | `nestjs_challenge`      | Database development                                           |
+| `DATABASE_TEST_NAME`     | `nestjs_challenge_test` | Database test yang wajib berbeda                               |
+| `DATABASE_POOL_MAX`      | `10`                    | Batas pool antara `1-50`                                       |
+| `DATABASE_SSL`           | `false`                 | Boolean eksplisit `true` atau `false`                          |
+| `JWT_SECRET`             | Tidak ada               | Signing secret minimal 32 karakter; wajib dikonfigurasi        |
+| `JWT_EXPIRES_IN_SECONDS` | `900`                   | Masa berlaku access token, maksimum 86400 detik                |
 
 Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 
@@ -288,6 +323,7 @@ Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 |-- docs/database/
 |-- src/
 |   |-- common/
+|   |-- auth/
 |   |-- config/
 |   |-- database/
 |   |-- projects/
@@ -307,6 +343,7 @@ Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
 ## Dokumen Perencanaan
 
 - [Error Contract](docs/api/error-contract.md)
+- [Authentication](docs/api/authentication.md)
 - [Database Schema](docs/database/schema.md)
 - [Scope](docs/planning/scope.md)
 - [Domain Rules](docs/planning/domain-rules.md)

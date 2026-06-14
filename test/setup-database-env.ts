@@ -7,3 +7,5 @@ process.env.DATABASE_NAME = 'nestjs_challenge';
 process.env.DATABASE_TEST_NAME = 'nestjs_challenge_test';
 process.env.DATABASE_POOL_MAX = '5';
 process.env.DATABASE_SSL = 'false';
+process.env.JWT_SECRET = 'test-only-jwt-secret-with-at-least-32-characters';
+process.env.JWT_EXPIRES_IN_SECONDS = '900';
