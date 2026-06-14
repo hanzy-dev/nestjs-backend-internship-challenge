@@ -1,51 +1,156 @@
 # NestJS Backend Internship Challenge
 
-Repositori ini berisi REST API modular berbasis NestJS untuk authentication,
-Project, dan Task. Implementasi saat ini mencakup fondasi operasional,
-hardening HTTP, observability terstruktur, Redis cache-aside untuk Project
-Detail, serta satu antrean BullMQ untuk aktivitas Task.
+REST API modular untuk authentication, Project, dan Task dengan PostgreSQL,
+JWT ownership, structured logging, Redis cache-aside, BullMQ, dokumentasi
+OpenAPI/Postman, container delivery, dan quality gates.
 
-## Status Saat Ini
+## Status
 
-**Fast-track Batch 6 — Operational Foundation**
+**Fast-track Batch 7 — API Documentation and Delivery**
 
-## Fitur yang Tersedia
+## Cakupan Requirement
 
-- registration, login, dan JWT access token;
-- Project CRUD dan Task CRUD nested dengan ownership;
-- pagination, filter, sorting terbatas, dan Project Detail dengan Tasks;
-- structured logging berbasis Pino;
-- korelasi `X-Request-ID` pada log, response header, dan error body;
-- redaction untuk credential, token, cookie, dan field password;
-- Helmet, CORS origin eksplisit, serta batas ukuran request body;
-- throttling khusus endpoint register dan login;
-- liveness dan PostgreSQL readiness endpoint;
-- Redis cache-aside untuk Project Detail;
-- invalidasi cache tepat setelah mutasi Project dan Task berhasil;
-- satu BullMQ queue dan satu worker untuk aktivitas Task;
-- namespace Redis terpisah untuk cache dan BullMQ; dan
-- graceful shutdown untuk Nest, PostgreSQL, Redis, Queue, Worker, dan
-  QueueEvents.
+- authentication JWT dengan bcrypt;
+- Project CRUD dan nested Task CRUD;
+- ownership dan private-resource `404`;
+- validation, serialization, dan error contract;
+- PostgreSQL migration dan relation;
+- Pino logging, request ID, redaction, Helmet, CORS, dan throttling;
+- health/readiness;
+- Redis Project Detail cache;
+- BullMQ Task activity;
+- Swagger/OpenAPI dan Postman;
+- multi-stage Docker image dan unified Compose;
+- GitHub Actions untuk quality, E2E, integration, dan Docker;
+- architecture overview dan ADR.
 
-Swagger, Postman Collection, application Docker packaging, CI, seed data, dan
-Loom belum diimplementasikan dan tetap menjadi pekerjaan batch berikutnya.
+Seed/demo data, Loom, submission material, refresh token, RBAC, microservices,
+dan cloud deployment belum diimplementasikan.
 
-## Endpoint Utama
+## Teknologi
 
-### Authentication
+- Node.js 22, TypeScript, NestJS 11
+- PostgreSQL 17, TypeORM
+- Passport JWT, bcrypt
+- Redis 7.4, ioredis, BullMQ
+- Pino, Helmet, Nest Throttler
+- Swagger/OpenAPI 3, Postman
+- Jest, Supertest
+- Docker, Docker Compose, GitHub Actions
+
+## Quick Start dengan Docker
+
+```bash
+docker compose -f compose.yml build
+docker compose -f compose.yml run --rm migrate
+docker compose -f compose.yml up -d app
+docker compose -f compose.yml ps
+```
+
+Endpoint lokal:
+
+- API: `http://localhost:3000/api/v1`
+- Swagger UI: `http://localhost:3000/api/docs`
+- OpenAPI JSON: `http://localhost:3000/api/docs-json`
+- Liveness: `http://localhost:3000/health`
+- Readiness: `http://localhost:3000/health/ready`
+
+Stop stack:
+
+```bash
+docker compose -f compose.yml down
+```
+
+Nilai Compose adalah credential lokal aman untuk evaluator, bukan konfigurasi
+production. Ganti `JWT_SECRET` dan credential database untuk penggunaan
+non-lokal.
+
+## Development Lokal
+
+```bash
+npm ci
+npm run database:start
+npm run redis:start
+npm run migration:run
+npm run start:dev
+```
+
+Focused Compose PostgreSQL dan Redis tetap tersedia. Unified `compose.yml`
+adalah workflow delivery yang disarankan dan menghindari orphan warning.
+
+## Environment
+
+Salin `.env.example` menjadi `.env` lokal. File `.env` diabaikan Git dan tidak
+disalin ke Docker image.
+
+Kelompok konfigurasi:
+
+- aplikasi: `NODE_ENV`, `PORT`, `API_PREFIX`;
+- PostgreSQL: `DATABASE_*`;
+- JWT: `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`;
+- logging/security: `LOG_*`, `CORS_ORIGINS`, `REQUEST_BODY_LIMIT`,
+  `AUTH_THROTTLE_*`;
+- Redis: `REDIS_*`, `CACHE_ENABLED`, `CACHE_TTL_SECONDS`, `QUEUE_ENABLED`.
+
+Boolean, port, TTL, timeout, namespace, body limit, dan CORS origins divalidasi
+saat startup.
+
+## Migration
+
+Migration tidak berjalan otomatis saat aplikasi dimulai.
+
+Lokal:
+
+```bash
+npm run migration:show
+npm run migration:run
+npm run migration:revert
+```
+
+Docker:
+
+```bash
+docker compose -f compose.yml run --rm migrate
+```
+
+## API Documentation
+
+- [Swagger UI](http://localhost:3000/api/docs)
+- [OpenAPI JSON](http://localhost:3000/api/docs-json)
+- [Authentication](docs/api/authentication.md)
+- [Project dan Task](docs/api/projects-and-tasks.md)
+- [Error Contract](docs/api/error-contract.md)
+- [Runtime](docs/operations/runtime.md)
+
+Swagger memakai route dan request DTO yang sama dengan aplikasi. Protected
+route mendeklarasikan Bearer JWT dan dokumentasi mencakup schema response,
+pagination, enum, nullable field, Project Detail Tasks, error, serta request
+ID.
+
+## Postman
+
+Import:
+
+1. `docs/postman/nestjs-backend-internship-challenge.postman_collection.json`
+2. `docs/postman/local.postman_environment.json`
+
+Pilih environment lokal, lalu jalankan folder Health, Authentication,
+Projects, dan Tasks secara berurutan. Script menyimpan `accessToken`, `userId`,
+`projectId`, dan `taskId`. Token yang dikomit selalu kosong.
+
+Validasi:
+
+```bash
+npm run docs:validate
+```
+
+## Endpoint
 
 ```text
 POST /api/v1/auth/register
 POST /api/v1/auth/login
 GET  /api/v1/auth/me
-```
 
-Endpoint register dan login memiliki throttling in-memory per instance.
-Endpoint CRUD lain tidak menggunakan guard throttling tersebut.
-
-### Project dan Task
-
-```text
 POST   /api/v1/projects
 GET    /api/v1/projects
 GET    /api/v1/projects/:projectId
@@ -57,212 +162,93 @@ GET    /api/v1/projects/:projectId/tasks
 GET    /api/v1/projects/:projectId/tasks/:taskId
 PATCH  /api/v1/projects/:projectId/tasks/:taskId
 DELETE /api/v1/projects/:projectId/tasks/:taskId
-```
 
-Semua endpoint Project dan Task dilindungi JWT. Query ownership menggunakan
-identitas User dari token. Resource yang tidak ditemukan atau dimiliki User
-lain menghasilkan `404 RESOURCE_NOT_FOUND`.
-
-Detail API tersedia pada
-[Dokumentasi Project dan Task](docs/api/projects-and-tasks.md).
-
-### Health
-
-```text
 GET /health
 GET /health/ready
+GET /api/docs
+GET /api/docs-json
 ```
 
-`/health` hanya memeriksa proses aplikasi. `/health/ready` menjalankan query
-ringan `SELECT 1` ke PostgreSQL. Keduanya publik dan tidak bergantung pada
-status fitur Redis opsional.
+## Arsitektur
 
-## Logging dan Request ID
+Aplikasi tetap modular monolith. Setiap domain memiliki controller, service,
+repository, DTO, dan persistence boundary. PostgreSQL adalah source of truth;
+Redis cache dan BullMQ bersifat sekunder.
 
-Log HTTP menggunakan JSON secara default. Pretty output hanya aktif jika
-`LOG_PRETTY=true` pada environment `development`. Logging HTTP dinonaktifkan
-dalam test agar output tetap bersih.
+```mermaid
+flowchart LR
+  Client --> Nest[NestJS Modular Monolith]
+  Nest --> PostgreSQL
+  Nest --> Redis
+  Nest --> BullMQ
+  BullMQ --> Worker
+```
 
-Setiap request menerima `X-Request-ID`. Nilai dari client diterima hanya jika
-berisi 1–128 karakter yang aman (`A-Z`, `a-z`, angka, `.`, `_`, `:`, atau `-`);
-nilai lain diganti UUID. ID yang sama tersedia pada response header dan body
-error.
+Detail dan diagram lengkap:
 
-Field sensitif seperti authorization header, cookie, password,
-`passwordHash`, access token, JWT secret, database password, dan Redis
-password disensor oleh konfigurasi Pino.
+- [Architecture Overview](docs/architecture/overview.md)
+- [ADR 0001: Modular Layered Architecture](docs/adr/0001-use-modular-layered-architecture.md)
+- [ADR 0002: PostgreSQL dan TypeORM](docs/adr/0002-use-postgresql-and-typeorm.md)
+- [ADR 0003: Namespace Redis dan BullMQ](docs/adr/0003-isolate-redis-cache-and-bullmq-namespaces.md)
 
-Penjelasan operasional lengkap tersedia pada
-[Panduan Runtime](docs/operations/runtime.md).
+## ERD
 
-## HTTP Security
+```mermaid
+erDiagram
+  USERS ||--o{ PROJECTS : owns
+  PROJECTS ||--o{ TASKS : contains
+```
 
-- Helmet menambahkan security headers.
-- CORS hanya menerima origin dari `CORS_ORIGINS`.
-- Wildcard CORS ditolak oleh validasi environment.
-- JSON dan URL-encoded body menggunakan batas `REQUEST_BODY_LIMIT`.
-- Error `413` dinormalisasi menjadi `PAYLOAD_TOO_LARGE`.
-- Login dan register menggunakan limit serta TTL yang tervalidasi.
+Project deletion melakukan cascade ke Tasks. Project Detail memuat Tasks
+melalui explicit join tanpa query per Task.
 
-## Redis Project Detail Cache
+## Logging, Cache, dan Queue
 
-Cache hanya digunakan untuk:
+Pino mencatat JSON terstruktur dengan request ID dan menyensor credential.
+Project Detail memakai owner-scoped cache-aside:
 
 ```text
-GET /api/v1/projects/:projectId
+<namespace>:<environment>:cache:project:<userId>:<projectId>
 ```
 
-Key bersifat owner-scoped:
+BullMQ memakai prefix terpisah:
 
 ```text
-<REDIS_NAMESPACE>:<NODE_ENV>:cache:project:<userId>:<projectId>
+<namespace>:<environment>:bull
 ```
 
-Alur cache-aside:
+Queue `task-activity` menghasilkan `TASK_CREATED` dan
+`TASK_STATUS_CHANGED`. Job memiliki bounded retry/backoff dan retention.
 
-```text
-Redis get
-→ hit: kembalikan Project Detail aman
-→ miss/error/data rusak: query PostgreSQL
-→ simpan response aman dengan TTL
-→ kembalikan response
-```
+## Docker
 
-Redis tidak menyimpan entity persistence atau `passwordHash`. Jika Redis tidak
-tersedia, core authentication dan CRUD tetap menggunakan PostgreSQL.
+`Dockerfile` memakai multi-stage build, `npm ci`, production dependencies
+saja, dan runtime user non-root. Image tidak membawa `.env`, test, coverage,
+docs cache, Git metadata, atau local `node_modules`.
 
-Invalidasi hanya menghapus exact owner-scoped Project Detail key setelah:
+`compose.yml` menyediakan app, PostgreSQL, Redis, dan one-shot migration.
+PostgreSQL dan Redis bind ke loopback untuk workflow lokal.
 
-- Project update;
-- Project delete;
-- Task create;
-- Task update; dan
-- Task delete.
+## CI
 
-Mutasi database yang gagal tidak memicu invalidasi. Kegagalan invalidasi
-setelah SQL berhasil hanya dicatat sebagai warning dan tidak membatalkan
-mutasi SQL.
+`.github/workflows/ci.yml` berjalan pada push dan pull request ke `main`:
 
-## BullMQ Task Activity
+- Quality and coverage
+- PostgreSQL E2E
+- Redis and BullMQ integration
+- Docker and Compose
 
-Implementasi membuat tepat satu queue dan satu worker:
+Semua job wajib berhasil, memakai timeout, dependency cache, pinned major
+official actions, dan tidak memakai `continue-on-error`.
 
-```text
-task-activity
-```
-
-Event diproduksi setelah persistence berhasil untuk:
-
-- `TASK_CREATED`; dan
-- `TASK_STATUS_CHANGED` hanya ketika status benar-benar berubah.
-
-Payload hanya berisi `eventId`, `eventType`, `userId`, `projectId`, `taskId`,
-dan `occurredAt`. `eventId` digunakan sebagai BullMQ job ID untuk mencegah
-duplikasi job dengan ID yang sama.
-
-Job menggunakan maksimum 3 attempts, exponential backoff awal 1 detik, serta
-retention maksimum 100 completed dan 100 failed jobs. Kegagalan enqueue tidak
-membatalkan mutasi SQL yang sudah berhasil. Implementasi ini tidak menggunakan
-transactional outbox, sehingga terdapat kemungkinan event hilang setelah
-commit SQL tetapi sebelum enqueue berhasil.
-
-BullMQ menggunakan prefix:
-
-```text
-<REDIS_NAMESPACE>:<NODE_ENV>:bull
-```
-
-Konfigurasi tidak menggunakan ioredis `keyPrefix`.
-
-## Menjalankan Dependency Lokal
-
-PostgreSQL:
+## Testing dan Coverage
 
 ```bash
-npm run database:start
-npm run database:status
-npm run database:logs
-npm run database:stop
+npm run verify
+npm run verify:full
 ```
 
-Redis:
-
-```bash
-npm run redis:start
-npm run redis:status
-npm run redis:logs
-npm run redis:stop
-```
-
-Keduanya:
-
-```bash
-npm run dependencies:start
-npm run dependencies:status
-```
-
-`compose.redis.yml` hanya menyediakan Redis lokal yang bind ke `127.0.0.1`.
-Repositori belum memiliki application container atau production deployment
-claim.
-
-## Instalasi dan Menjalankan Aplikasi
-
-Prasyarat:
-
-- Node.js 22;
-- npm 11 atau versi kompatibel;
-- PostgreSQL untuk persistence; dan
-- Redis hanya jika cache atau queue diaktifkan.
-
-```bash
-npm install
-npm run start:dev
-```
-
-Build production lokal:
-
-```bash
-npm run build
-npm run start:prod
-```
-
-Salin nilai `.env.example` ke konfigurasi lokal dan ganti seluruh credential
-development sebelum penggunaan non-lokal. Jangan commit file `.env`.
-
-## Environment Variables
-
-| Variable                    | Default                 | Keterangan                                                |
-| --------------------------- | ----------------------- | --------------------------------------------------------- |
-| `NODE_ENV`                  | `development`           | `development`, `test`, atau `production`                  |
-| `PORT`                      | `3000`                  | Port aplikasi                                             |
-| `API_PREFIX`                | `api/v1`                | Prefix endpoint bisnis                                    |
-| `DATABASE_HOST`             | `localhost`             | Host PostgreSQL                                           |
-| `DATABASE_PORT`             | `5432`                  | Port PostgreSQL                                           |
-| `DATABASE_USER`             | `postgres`              | User PostgreSQL lokal                                     |
-| `DATABASE_PASSWORD`         | `postgres`              | Password lokal, bukan credential production               |
-| `DATABASE_NAME`             | `nestjs_challenge`      | Database development                                      |
-| `DATABASE_TEST_NAME`        | `nestjs_challenge_test` | Database test yang wajib berbeda                          |
-| `DATABASE_POOL_MAX`         | `10`                    | Batas pool PostgreSQL                                     |
-| `DATABASE_SSL`              | `false`                 | Boolean eksplisit                                         |
-| `JWT_SECRET`                | wajib                   | Signing secret minimal 32 karakter                        |
-| `JWT_EXPIRES_IN_SECONDS`    | `900`                   | Masa berlaku access token                                 |
-| `LOG_LEVEL`                 | `info`                  | Level Pino                                                |
-| `LOG_PRETTY`                | `false`                 | Pretty log hanya efektif pada development                 |
-| `CORS_ORIGINS`              | `http://localhost:3000` | Daftar origin dipisahkan koma                             |
-| `REQUEST_BODY_LIMIT`        | `100kb`                 | Batas JSON dan URL-encoded body                           |
-| `AUTH_THROTTLE_LIMIT`       | `10`                    | Maksimum request auth dalam window                        |
-| `AUTH_THROTTLE_TTL_SECONDS` | `60`                    | Window throttling                                         |
-| `REDIS_HOST`                | `localhost`             | Host Redis                                                |
-| `REDIS_PORT`                | `6379`                  | Port Redis                                                |
-| `REDIS_PASSWORD`            | kosong                  | Hanya boleh kosong untuk Redis lokal yang tidak terekspos |
-| `REDIS_TLS`                 | `false`                 | Boolean eksplisit                                         |
-| `REDIS_CONNECT_TIMEOUT_MS`  | `2000`                  | Timeout koneksi Redis                                     |
-| `REDIS_NAMESPACE`           | `nestjs-challenge`      | Prefix dasar aman; environment ditambahkan otomatis       |
-| `CACHE_ENABLED`             | `false`                 | Mengaktifkan Project Detail cache                         |
-| `CACHE_TTL_SECONDS`         | `300`                   | TTL Project Detail                                        |
-| `QUEUE_ENABLED`             | `false`                 | Mengaktifkan queue dan worker aktivitas Task              |
-
-## Pengujian
+Perintah individual:
 
 ```bash
 npm run format:check
@@ -271,31 +257,57 @@ npm run typecheck
 npm run build
 npm test
 npm run test:cov
-npm run test:e2e
+npm run docs:validate
 npm run test:e2e -- --detectOpenHandles
-npm run test:integration -- --detectOpenHandles --verbose
+npm run test:integration -- --detectOpenHandles
 ```
 
-Unit test mencakup konfigurasi, request ID, logging, health, authentication,
-Project, Task, cache invalidation, dan validasi payload aktivitas. E2E
-menggunakan PostgreSQL nyata. Integration test cache dan queue menggunakan
-Redis nyata serta membersihkan hanya key yang dimiliki suite.
+Coverage gate global:
 
-Hasil validasi Batch 6 saat ini adalah 100 unit test, 66 E2E test, dan 8 Redis
-integration test.
+| Metric     | Minimum |
+| ---------- | ------: |
+| Statements |     50% |
+| Branches   |     52% |
+| Functions  |     39% |
+| Lines      |     49% |
 
-Setiap Nest E2E application ditutup dengan `await app.close()`. Integration
-test juga menutup Redis client, Queue, Worker, QueueEvents, timer observasi,
-dan testing module secara deterministik.
+Baseline terukur setelah Swagger adalah 51.11% statements, 52.46% branches,
+39.52% functions, dan 50.04% lines. DTO decorator, Nest module/bootstrap,
+entity metadata, migration, dan integration-heavy infrastructure ikut dihitung
+oleh Jest; business service utama memiliki coverage lebih tinggi dan perilaku
+runtime juga diuji lewat E2E/integration.
 
-## Dokumentasi
+## Security Decisions
 
-- [Authentication](docs/api/authentication.md)
-- [Error Contract](docs/api/error-contract.md)
-- [Project dan Task](docs/api/projects-and-tasks.md)
-- [Runtime dan Operasional](docs/operations/runtime.md)
-- [Database Schema](docs/database/schema.md)
-- [Scope](docs/planning/scope.md)
-- [Domain Rules](docs/planning/domain-rules.md)
-- [Requirements Matrix](docs/planning/requirements-matrix.md)
-- [Roadmap](docs/planning/roadmap.md)
+- password di-hash bcrypt dan tidak dikembalikan;
+- JWT secret tervalidasi dan tidak dikomit;
+- ownership diterapkan pada query Project dan parent Project;
+- validation menolak unknown property;
+- Helmet, explicit CORS, body limit, dan auth throttling aktif;
+- authorization, cookie, password, hash, token, dan credential log disensor;
+- container berjalan non-root;
+- Redis tidak memakai broad flush atau wildcard cleanup.
+
+## Trade-off
+
+Modular monolith dipilih untuk transaksi lokal, deployment sederhana, dan
+scope challenge. Cache/queue meningkatkan operasional tanpa menjadikan Redis
+source of truth. Throttling masih in-memory per instance.
+
+## Known Limitations
+
+- hanya access token, tanpa refresh-token rotation;
+- satu aplikasi modular monolith;
+- commit PostgreSQL dan enqueue BullMQ tidak atomik;
+- tidak ada transactional outbox;
+- tidak ada distributed tracing;
+- tidak ada complex RBAC;
+- tidak ada production secret-management system;
+- tidak ada seed/demo data pada Batch 7.
+
+## Future Improvements
+
+Batch berikutnya dapat menambahkan seed/demo data dan submission material.
+Untuk production, pertimbangkan secret manager, distributed throttling,
+transactional outbox, tracing, backup/restore, dan deployment platform
+terkelola.

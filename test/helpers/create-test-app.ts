@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
 import { configureApplication } from '../../src/app.setup';
+import { configureSwagger } from '../../src/docs/swagger.config';
 
 export interface DatabaseTestApplication {
   app: NestExpressApplication;
@@ -17,6 +18,7 @@ export async function createDatabaseTestApplication(): Promise<DatabaseTestAppli
   const app = moduleFixture.createNestApplication<NestExpressApplication>();
 
   configureApplication(app, app.get(ConfigService));
+  configureSwagger(app);
   await app.init();
 
   return {

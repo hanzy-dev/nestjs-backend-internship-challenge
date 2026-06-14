@@ -7,10 +7,12 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { trimString } from '../../common/dto/string-transforms';
 import { ProjectStatus } from '../domain/project-status.enum';
 
 export class UpdateProjectDto {
+  @ApiPropertyOptional({ minLength: 1, maxLength: 160 })
   @Transform(({ value }: TransformFnParams) => trimString(value))
   @IsOptional()
   @IsString()
@@ -18,6 +20,11 @@ export class UpdateProjectDto {
   @MaxLength(160)
   name?: string;
 
+  @ApiPropertyOptional({
+    minLength: 1,
+    maxLength: 2000,
+    nullable: true,
+  })
   @Transform(({ value }: TransformFnParams) => trimString(value))
   @IsOptional()
   @IsString()
@@ -25,10 +32,12 @@ export class UpdateProjectDto {
   @MaxLength(2000)
   description?: string | null;
 
+  @ApiPropertyOptional({ enum: ProjectStatus })
   @IsOptional()
   @IsEnum(ProjectStatus)
   status?: ProjectStatus;
 
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
   @IsOptional()
   @IsISO8601({ strict: true })
   dueDate?: string | null;

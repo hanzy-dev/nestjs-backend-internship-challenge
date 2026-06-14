@@ -1,0 +1,111 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-nestjs_challenge}
+      POSTGRES_TEST_DB: ${DATABASE_TEST_NAME:-nestjs_challenge_test}
+    ports:
+      - '127.0.0.1:${DATABASE_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-nestjs_challenge}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  migrate:
+    build:
+      context: .
+      target: runtime
+    environment: &app-environment
+      NODE_ENV: production
+      PORT: 3000
+      API_PREFIX: api/v1
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      DATABASE_NAME: ${DATABASE_NAME:-nestjs_challenge}
+      DATABASE_TEST_NAME: ${DATABASE_TEST_NAME:-nestjs_challenge_test}
+      DATABASE_POOL_MAX: 10
+      DATABASE_SSL: 'false'
+      JWT_SECRET: ${JWT_SECRET:-local-compose-jwt-secret-change-before-production}
+      JWT_EXPIRES_IN_SECONDS: 900
+      LOG_LEVEL: info
+      LOG_PRETTY: 'false'
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      REQUEST_BODY_LIMIT: 100kb
+      AUTH_THROTTLE_LIMIT: 10
+      AUTH_THROTTLE_TTL_SECONDS: 60
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ''
+      REDIS_TLS: 'false'
+      REDIS_CONNECT_TIMEOUT_MS: 2000
+      REDIS_NAMESPACE: nestjs-challenge
+      CACHE_ENABLED: 'true'
+      CACHE_TTL_SECONDS: 300
+      QUEUE_ENABLED: 'true'
+    command:
+      [
+        'node',
+        'node_modules/typeorm/cli.js',
+        'migration:run',
+        '-d',
+        'dist/database/data-source.js',
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    build:
+      context: .
+      target: runtime
+    environment: *app-environment
+    ports:
+      - '127.0.0.1:${APP_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
