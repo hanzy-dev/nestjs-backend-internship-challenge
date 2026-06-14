@@ -1,7 +1,13 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { createPaginationMeta } from '../common/dto/pagination-meta.dto';
 import { PROJECT_DETAIL_CACHE_INVALIDATOR } from './cache/project-detail-cache-invalidator';
 import type { ProjectDetailCacheInvalidator } from './cache/project-detail-cache-invalidator';
+import { ProjectDetailCacheService } from './cache/project-detail-cache.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { ListProjectsQueryDto } from './dto/list-projects-query.dto';
 import {
@@ -25,6 +31,8 @@ export class ProjectsService {
     private readonly projectsRepository: ProjectsRepository,
     @Inject(PROJECT_DETAIL_CACHE_INVALIDATOR)
     private readonly cacheInvalidator: ProjectDetailCacheInvalidator,
+    @Optional()
+    private readonly detailCache?: ProjectDetailCacheService,
   ) {}
 
   async create(
@@ -59,6 +67,11 @@ export class ProjectsService {
     ownerId: string,
     projectId: string,
   ): Promise<ProjectDetailResponse> {
+    const cached = await this.detailCache?.get(ownerId, projectId);
+    if (cached) {
+      return cached;
+    }
+
     const project = await this.projectsRepository.findDetailByIdAndOwner(
       projectId,
       ownerId,
@@ -68,7 +81,9 @@ export class ProjectsService {
       throw new NotFoundException(PROJECT_NOT_FOUND_MESSAGE);
     }
 
-    return mapProjectDetailResponse(project);
+    const response = mapProjectDetailResponse(project);
+    await this.detailCache?.set(ownerId, projectId, response);
+    return response;
   }
 
   async requireOwnedProject(
