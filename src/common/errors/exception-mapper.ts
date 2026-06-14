@@ -15,6 +15,7 @@ const statusCodeMap: Partial<Record<number, ApiErrorCode>> = {
   [HttpStatus.NOT_FOUND]: ApiErrorCode.ResourceNotFound,
   [HttpStatus.CONFLICT]: ApiErrorCode.Conflict,
   [HttpStatus.TOO_MANY_REQUESTS]: ApiErrorCode.TooManyRequests,
+  [HttpStatus.PAYLOAD_TOO_LARGE]: ApiErrorCode.PayloadTooLarge,
 };
 
 const defaultMessages: Partial<Record<number, string>> = {
@@ -24,10 +25,20 @@ const defaultMessages: Partial<Record<number, string>> = {
   [HttpStatus.NOT_FOUND]: 'Resource not found',
   [HttpStatus.CONFLICT]: 'Resource conflict',
   [HttpStatus.TOO_MANY_REQUESTS]: 'Too many requests',
+  [HttpStatus.PAYLOAD_TOO_LARGE]: 'Request body is too large',
 };
 
 export function mapException(exception: unknown): MappedException {
   if (!(exception instanceof HttpException)) {
+    if (isHttpStatusError(exception, HttpStatus.PAYLOAD_TOO_LARGE)) {
+      return {
+        statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+        code: ApiErrorCode.PayloadTooLarge,
+        message: 'Request body is too large',
+        details: {},
+      };
+    }
+
     return {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       code: ApiErrorCode.InternalError,
@@ -69,6 +80,13 @@ export function mapException(exception: unknown): MappedException {
       'An unexpected error occurred',
     details: {},
   };
+}
+
+function isHttpStatusError(value: unknown, statusCode: number): boolean {
+  return (
+    isRecord(value) &&
+    (value.status === statusCode || value.statusCode === statusCode)
+  );
 }
 
 function getValidationResponse(

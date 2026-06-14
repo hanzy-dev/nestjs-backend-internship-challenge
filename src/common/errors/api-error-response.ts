@@ -7,4 +7,5 @@ export interface ApiErrorResponse {
   details: Record<string, unknown>;
   timestamp: string;
   path: string;
+  requestId: string;
 }

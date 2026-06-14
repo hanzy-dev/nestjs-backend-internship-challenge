@@ -16,7 +16,24 @@ export interface EnvironmentVariables {
   DATABASE_SSL: boolean;
   JWT_SECRET: string;
   JWT_EXPIRES_IN_SECONDS: number;
+  LOG_LEVEL: string;
+  LOG_PRETTY: boolean;
+  CORS_ORIGINS: string[];
+  REQUEST_BODY_LIMIT: string;
+  AUTH_THROTTLE_LIMIT: number;
+  AUTH_THROTTLE_TTL_SECONDS: number;
+  REDIS_HOST: string;
+  REDIS_PORT: number;
+  REDIS_PASSWORD: string;
+  REDIS_TLS: boolean;
+  REDIS_CONNECT_TIMEOUT_MS: number;
+  REDIS_NAMESPACE: string;
+  CACHE_ENABLED: boolean;
+  CACHE_TTL_SECONDS: number;
+  QUEUE_ENABLED: boolean;
 }
+
+const explicitBoolean = Joi.boolean().truthy('true').falsy('false');
 
 const environmentSchema = Joi.object<EnvironmentVariables>({
   NODE_ENV: Joi.string()
@@ -41,6 +58,37 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
     .default(false),
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN_SECONDS: Joi.number().integer().min(1).max(86400).default(900),
+  LOG_LEVEL: Joi.string()
+    .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
+    .default('info'),
+  LOG_PRETTY: explicitBoolean.default(false),
+  CORS_ORIGINS: Joi.string().trim().min(1).default('http://localhost:3000'),
+  REQUEST_BODY_LIMIT: Joi.string()
+    .trim()
+    .pattern(/^\d+(kb|mb)$/i)
+    .default('100kb'),
+  AUTH_THROTTLE_LIMIT: Joi.number().integer().min(1).max(1000).default(10),
+  AUTH_THROTTLE_TTL_SECONDS: Joi.number()
+    .integer()
+    .min(1)
+    .max(3600)
+    .default(60),
+  REDIS_HOST: Joi.string().trim().min(1).default('localhost'),
+  REDIS_PORT: Joi.number().integer().min(1).max(65535).default(6379),
+  REDIS_PASSWORD: Joi.string().allow('').default(''),
+  REDIS_TLS: explicitBoolean.default(false),
+  REDIS_CONNECT_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(100)
+    .max(30000)
+    .default(2000),
+  REDIS_NAMESPACE: Joi.string()
+    .trim()
+    .pattern(/^[a-z0-9][a-z0-9-]*$/)
+    .default('nestjs-challenge'),
+  CACHE_ENABLED: explicitBoolean.default(false),
+  CACHE_TTL_SECONDS: Joi.number().integer().min(1).max(86400).default(300),
+  QUEUE_ENABLED: explicitBoolean.default(false),
 }).unknown(true);
 
 export function normalizeApiPrefix(prefix: string): string {
@@ -83,7 +131,22 @@ export function validateEnvironment(
     typeof value.DATABASE_POOL_MAX !== 'number' ||
     typeof value.DATABASE_SSL !== 'boolean' ||
     typeof value.JWT_SECRET !== 'string' ||
-    typeof value.JWT_EXPIRES_IN_SECONDS !== 'number'
+    typeof value.JWT_EXPIRES_IN_SECONDS !== 'number' ||
+    typeof value.LOG_LEVEL !== 'string' ||
+    typeof value.LOG_PRETTY !== 'boolean' ||
+    typeof value.CORS_ORIGINS !== 'string' ||
+    typeof value.REQUEST_BODY_LIMIT !== 'string' ||
+    typeof value.AUTH_THROTTLE_LIMIT !== 'number' ||
+    typeof value.AUTH_THROTTLE_TTL_SECONDS !== 'number' ||
+    typeof value.REDIS_HOST !== 'string' ||
+    typeof value.REDIS_PORT !== 'number' ||
+    typeof value.REDIS_PASSWORD !== 'string' ||
+    typeof value.REDIS_TLS !== 'boolean' ||
+    typeof value.REDIS_CONNECT_TIMEOUT_MS !== 'number' ||
+    typeof value.REDIS_NAMESPACE !== 'string' ||
+    typeof value.CACHE_ENABLED !== 'boolean' ||
+    typeof value.CACHE_TTL_SECONDS !== 'number' ||
+    typeof value.QUEUE_ENABLED !== 'boolean'
   ) {
     throw new Error('Environment validation failed: unexpected schema output');
   }
@@ -112,7 +175,49 @@ export function validateEnvironment(
     DATABASE_SSL: value.DATABASE_SSL,
     JWT_SECRET: value.JWT_SECRET,
     JWT_EXPIRES_IN_SECONDS: value.JWT_EXPIRES_IN_SECONDS,
+    LOG_LEVEL: value.LOG_LEVEL,
+    LOG_PRETTY: value.LOG_PRETTY,
+    CORS_ORIGINS: parseCorsOrigins(value.CORS_ORIGINS),
+    REQUEST_BODY_LIMIT: value.REQUEST_BODY_LIMIT.toLowerCase(),
+    AUTH_THROTTLE_LIMIT: value.AUTH_THROTTLE_LIMIT,
+    AUTH_THROTTLE_TTL_SECONDS: value.AUTH_THROTTLE_TTL_SECONDS,
+    REDIS_HOST: value.REDIS_HOST,
+    REDIS_PORT: value.REDIS_PORT,
+    REDIS_PASSWORD: value.REDIS_PASSWORD,
+    REDIS_TLS: value.REDIS_TLS,
+    REDIS_CONNECT_TIMEOUT_MS: value.REDIS_CONNECT_TIMEOUT_MS,
+    REDIS_NAMESPACE: value.REDIS_NAMESPACE,
+    CACHE_ENABLED: value.CACHE_ENABLED,
+    CACHE_TTL_SECONDS: value.CACHE_TTL_SECONDS,
+    QUEUE_ENABLED: value.QUEUE_ENABLED,
   };
+}
+
+function parseCorsOrigins(value: string): string[] {
+  const origins = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  if (origins.length === 0 || origins.includes('*')) {
+    throw new Error(
+      'Environment validation failed: CORS_ORIGINS must contain explicit origins',
+    );
+  }
+
+  for (const origin of origins) {
+    const parsed = new URL(origin);
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.origin !== origin
+    ) {
+      throw new Error(
+        'Environment validation failed: CORS_ORIGINS contains an invalid origin',
+      );
+    }
+  }
+
+  return [...new Set(origins)];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
