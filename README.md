@@ -1,80 +1,49 @@
 # NestJS Backend Internship Challenge
 
-Repositori ini berisi fondasi Project and Task Management REST API. Aplikasi
-saat ini menyediakan bootstrap NestJS, konfigurasi terpusat, validasi
-environment, API prefix, global runtime validation, safe serialization, error
-contract yang konsisten, serta authentication berbasis JWT.
+Repositori ini berisi REST API modular berbasis NestJS untuk authentication,
+Project, dan Task. Implementasi saat ini mencakup fondasi operasional,
+hardening HTTP, observability terstruktur, Redis cache-aside untuk Project
+Detail, serta satu antrean BullMQ untuk aktivitas Task.
 
 ## Status Saat Ini
 
-**Fast-track Batch 5 — Project and Task Management**
+**Fast-track Batch 6 — Operational Foundation**
 
-## Ruang Lingkup
+## Fitur yang Tersedia
 
-Proyek direncanakan sebagai modular monolith dengan dua resource CRUD utama,
-yaitu Project dan Task. Authentication, Project CRUD, dan Task CRUD nested
-sudah tersedia dengan ownership berbasis identitas JWT.
+- registration, login, dan JWT access token;
+- Project CRUD dan Task CRUD nested dengan ownership;
+- pagination, filter, sorting terbatas, dan Project Detail dengan Tasks;
+- structured logging berbasis Pino;
+- korelasi `X-Request-ID` pada log, response header, dan error body;
+- redaction untuk credential, token, cookie, dan field password;
+- Helmet, CORS origin eksplisit, serta batas ukuran request body;
+- throttling khusus endpoint register dan login;
+- liveness dan PostgreSQL readiness endpoint;
+- Redis cache-aside untuk Project Detail;
+- invalidasi cache tepat setelah mutasi Project dan Task berhasil;
+- satu BullMQ queue dan satu worker untuk aktivitas Task;
+- namespace Redis terpisah untuk cache dan BullMQ; dan
+- graceful shutdown untuk Nest, PostgreSQL, Redis, Queue, Worker, dan
+  QueueEvents.
 
-Teknologi yang sudah tersedia:
+Swagger, Postman Collection, application Docker packaging, CI, seed data, dan
+Loom belum diimplementasikan dan tetap menjadi pekerjaan batch berikutnya.
 
-- NestJS
-- TypeScript
-- npm
-- centralized configuration melalui `@nestjs/config`
-- Joi environment validation
-- global `ValidationPipe` dengan `class-validator`
-- transformasi DTO eksplisit dengan `class-transformer`
-- global `ClassSerializerInterceptor`
-- global exception filter dan error contract
-- registration dan login
-- bcrypt password hashing
-- JWT access token dan Passport strategy
-- protected current-user endpoint
-- Project CRUD dengan pagination, filter, dan sorting terbatas
-- Task CRUD nested dengan pagination, filter, dan sorting terbatas
-- ownership query pada Project dan parent Project
-- Project Detail dengan Tasks melalui explicit join
-- invalidation boundary no-op untuk Project Detail
-- Jest
-- Supertest
-- ESLint dan Prettier
+## Endpoint Utama
 
-Structured logging, request ID, HTTP hardening, health/readiness endpoint,
-Redis cache, BullMQ queue, Swagger, Postman, final Docker application
-packaging, dan CI masih direncanakan untuk batch berikutnya.
-
-## Authentication
-
-| Method | Path                    | Status | Fungsi                                                |
-| ------ | ----------------------- | ------ | ----------------------------------------------------- |
-| `POST` | `/api/v1/auth/register` | `201`  | Membuat User dengan password yang di-hash             |
-| `POST` | `/api/v1/auth/login`    | `200`  | Memverifikasi credential dan menerbitkan access token |
-| `GET`  | `/api/v1/auth/me`       | `200`  | Mengambil User saat ini dari Bearer token             |
-
-Email dinormalisasi dengan trim dan lowercase tanpa menghapus titik atau plus
-alias. Password di-hash menggunakan bcrypt dengan work factor 10, dibatasi
-hingga 72 byte UTF-8, dan tidak pernah disimpan atau dikembalikan sebagai
-plaintext.
-
-JWT menggunakan `HS256`, hanya membawa claim `sub` berisi UUID User, dan
-diterima melalui:
+### Authentication
 
 ```text
-Authorization: Bearer <access-token>
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
 ```
 
-Expiration selalu diverifikasi. Unknown email dan password salah menggunakan
-pesan generik yang sama. Refresh token, role, session, dan logout blacklist
-belum tersedia.
+Endpoint register dan login memiliki throttling in-memory per instance.
+Endpoint CRUD lain tidak menggunakan guard throttling tersebut.
 
-Detail lengkap tersedia di
-[Dokumentasi Authentication](docs/api/authentication.md).
-
-## Project dan Task
-
-Semua endpoint Project dan Task dilindungi JWT. Project selalu dibatasi dengan
-`ownerId` dari token terverifikasi. Task hanya diproses setelah Parent Project
-terbukti dimiliki User tersebut.
+### Project dan Task
 
 ```text
 POST   /api/v1/projects
@@ -90,47 +59,124 @@ PATCH  /api/v1/projects/:projectId/tasks/:taskId
 DELETE /api/v1/projects/:projectId/tasks/:taskId
 ```
 
-List menggunakan pagination database dengan default `page=1`, `limit=20`, dan
-maksimum `limit=100`. Filter dan kolom sorting menggunakan whitelist. Project
-Detail memuat Tasks melalui satu query dengan explicit join dan urutan
-deterministik, sehingga jumlah query tidak bertambah per Task.
+Semua endpoint Project dan Task dilindungi JWT. Query ownership menggunakan
+identitas User dari token. Resource yang tidak ditemukan atau dimiliki User
+lain menghasilkan `404 RESOURCE_NOT_FOUND`.
 
-Resource yang tidak ada atau dimiliki User lain menghasilkan
-`404 RESOURCE_NOT_FOUND`. Penghapusan Project menghapus Tasks melalui foreign
-key `ON DELETE CASCADE`.
-
-Project update/delete dan Task create/update/delete memanggil invalidation
-boundary setelah persistence berhasil. Implementasi saat ini no-op; belum ada
-Redis, cache read, cache write, atau cache key.
-
-Detail lengkap tersedia di
+Detail API tersedia pada
 [Dokumentasi Project dan Task](docs/api/projects-and-tasks.md).
 
-## Database
-
-Persistence menggunakan PostgreSQL 17 dan TypeORM. Tiga entity saat ini adalah:
-
-- `UserEntity` untuk tabel `users`;
-- `ProjectEntity` untuk tabel `projects`; dan
-- `TaskEntity` untuk tabel `tasks`.
-
-Relasi database:
+### Health
 
 ```text
-User 1 --- many Projects
-Project 1 --- many Tasks
+GET /health
+GET /health/ready
 ```
 
-Penghapusan User yang masih memiliki Project dibatasi oleh foreign key.
-Penghapusan Project menghapus Task anak dengan `ON DELETE CASCADE`. Relation
-loading tidak eager atau lazy dan harus dilakukan secara eksplisit.
+`/health` hanya memeriksa proses aplikasi. `/health/ready` menjalankan query
+ringan `SELECT 1` ke PostgreSQL. Keduanya publik dan tidak bergantung pada
+status fitur Redis opsional.
 
-Detail lengkap tersedia di [Dokumentasi Skema Database](docs/database/schema.md).
+## Logging dan Request ID
 
-## Menjalankan PostgreSQL
+Log HTTP menggunakan JSON secara default. Pretty output hanya aktif jika
+`LOG_PRETTY=true` pada environment `development`. Logging HTTP dinonaktifkan
+dalam test agar output tetap bersih.
 
-Compose ini hanya menjalankan service PostgreSQL untuk development dan test,
-bukan application container.
+Setiap request menerima `X-Request-ID`. Nilai dari client diterima hanya jika
+berisi 1–128 karakter yang aman (`A-Z`, `a-z`, angka, `.`, `_`, `:`, atau `-`);
+nilai lain diganti UUID. ID yang sama tersedia pada response header dan body
+error.
+
+Field sensitif seperti authorization header, cookie, password,
+`passwordHash`, access token, JWT secret, database password, dan Redis
+password disensor oleh konfigurasi Pino.
+
+Penjelasan operasional lengkap tersedia pada
+[Panduan Runtime](docs/operations/runtime.md).
+
+## HTTP Security
+
+- Helmet menambahkan security headers.
+- CORS hanya menerima origin dari `CORS_ORIGINS`.
+- Wildcard CORS ditolak oleh validasi environment.
+- JSON dan URL-encoded body menggunakan batas `REQUEST_BODY_LIMIT`.
+- Error `413` dinormalisasi menjadi `PAYLOAD_TOO_LARGE`.
+- Login dan register menggunakan limit serta TTL yang tervalidasi.
+
+## Redis Project Detail Cache
+
+Cache hanya digunakan untuk:
+
+```text
+GET /api/v1/projects/:projectId
+```
+
+Key bersifat owner-scoped:
+
+```text
+<REDIS_NAMESPACE>:<NODE_ENV>:cache:project:<userId>:<projectId>
+```
+
+Alur cache-aside:
+
+```text
+Redis get
+→ hit: kembalikan Project Detail aman
+→ miss/error/data rusak: query PostgreSQL
+→ simpan response aman dengan TTL
+→ kembalikan response
+```
+
+Redis tidak menyimpan entity persistence atau `passwordHash`. Jika Redis tidak
+tersedia, core authentication dan CRUD tetap menggunakan PostgreSQL.
+
+Invalidasi hanya menghapus exact owner-scoped Project Detail key setelah:
+
+- Project update;
+- Project delete;
+- Task create;
+- Task update; dan
+- Task delete.
+
+Mutasi database yang gagal tidak memicu invalidasi. Kegagalan invalidasi
+setelah SQL berhasil hanya dicatat sebagai warning dan tidak membatalkan
+mutasi SQL.
+
+## BullMQ Task Activity
+
+Implementasi membuat tepat satu queue dan satu worker:
+
+```text
+task-activity
+```
+
+Event diproduksi setelah persistence berhasil untuk:
+
+- `TASK_CREATED`; dan
+- `TASK_STATUS_CHANGED` hanya ketika status benar-benar berubah.
+
+Payload hanya berisi `eventId`, `eventType`, `userId`, `projectId`, `taskId`,
+dan `occurredAt`. `eventId` digunakan sebagai BullMQ job ID untuk mencegah
+duplikasi job dengan ID yang sama.
+
+Job menggunakan maksimum 3 attempts, exponential backoff awal 1 detik, serta
+retention maksimum 100 completed dan 100 failed jobs. Kegagalan enqueue tidak
+membatalkan mutasi SQL yang sudah berhasil. Implementasi ini tidak menggunakan
+transactional outbox, sehingga terdapat kemungkinan event hilang setelah
+commit SQL tetapi sebelum enqueue berhasil.
+
+BullMQ menggunakan prefix:
+
+```text
+<REDIS_NAMESPACE>:<NODE_ENV>:bull
+```
+
+Konfigurasi tidak menggunakan ioredis `keyPrefix`.
+
+## Menjalankan Dependency Lokal
+
+PostgreSQL:
 
 ```bash
 npm run database:start
@@ -139,255 +185,115 @@ npm run database:logs
 npm run database:stop
 ```
 
-Image PostgreSQL menggunakan major version yang dipin, named volume, dan
-health check `pg_isready`. Database test dibuat terpisah saat volume pertama
-kali diinisialisasi.
-
-## Migration
+Redis:
 
 ```bash
-npm run migration:show
-npm run migration:run
-npm run migration:revert
-npm run migration:generate
-npm run migration:create
+npm run redis:start
+npm run redis:status
+npm run redis:logs
+npm run redis:stop
 ```
 
-TypeORM runtime dan CLI menggunakan builder konfigurasi serta daftar entity
-eksplisit yang sama. `synchronize` dan automatic migration startup tidak
-diaktifkan.
+Keduanya:
 
-## Test Database
-
-E2E database menggunakan `DATABASE_TEST_NAME`, bukan `DATABASE_NAME`. Test akan
-gagal sebelum cleanup jika nama database test kosong, sama dengan database
-development, atau koneksi mengarah ke database yang tidak diharapkan.
-
-Migration dijalankan sebelum suite database. Cleanup dilakukan dalam urutan:
-
-```text
-tasks
-projects
-users
+```bash
+npm run dependencies:start
+npm run dependencies:status
 ```
 
-Setiap Nest application ditutup dengan `await app.close()`. Test database juga
-memastikan DataSource yang dikelola Nest tidak lagi initialized setelah
-aplikasi ditutup.
+`compose.redis.yml` hanya menyediakan Redis lokal yang bind ke `127.0.0.1`.
+Repositori belum memiliki application container atau production deployment
+claim.
 
-## Prasyarat
+## Instalasi dan Menjalankan Aplikasi
 
-- Node.js 22
-- npm 11 atau versi kompatibel
+Prasyarat:
 
-Versi mayor Node.js yang digunakan proyek dicatat dalam `.nvmrc`.
-
-## Instalasi
+- Node.js 22;
+- npm 11 atau versi kompatibel;
+- PostgreSQL untuk persistence; dan
+- Redis hanya jika cache atau queue diaktifkan.
 
 ```bash
 npm install
-```
-
-Buat konfigurasi lokal dari `.env.example` jika diperlukan. Jangan commit file
-`.env`.
-
-## Menjalankan Aplikasi
-
-Mode pengembangan:
-
-```bash
 npm run start:dev
 ```
 
-Mode biasa:
-
-```bash
-npm run start
-```
-
-Build dan menjalankan hasil build:
+Build production lokal:
 
 ```bash
 npm run build
 npm run start:prod
 ```
 
-## Endpoint Bootstrap
-
-Dengan konfigurasi default:
-
-```text
-GET /api/v1
-```
-
-Respons:
-
-```json
-{
-  "name": "NestJS Backend Internship Challenge",
-  "status": "Batch 1 - Bootstrap and configuration",
-  "version": "v1"
-}
-```
-
-Endpoint ini hanya memverifikasi bootstrap aplikasi dan tidak mewakili fitur
-bisnis.
-
-## Kontrak Validasi
-
-Semua endpoint produksi menggunakan global `ValidationPipe` dengan aturan:
-
-- hanya properti yang didefinisikan DTO yang diterima;
-- properti yang tidak dikenal ditolak;
-- payload ditransformasikan menjadi instance DTO;
-- implicit conversion global tidak diaktifkan;
-- konversi tipe harus dinyatakan secara eksplisit pada DTO; dan
-- validation error dinormalisasi tanpa menyertakan nilai input atau objek
-  internal validator.
-
-Aturan ini membatasi mass assignment dan menghentikan input tidak valid sebelum
-controller menjalankan logika aplikasi.
-
-## Serialization
-
-`ClassSerializerInterceptor` diterapkan secara global. Field sensitif dapat
-dikecualikan dari response menggunakan decorator serialization seperti
-`@Exclude()`. Response sukses tidak dibungkus dalam envelope tambahan.
-
-## Error Contract
-
-Semua error HTTP menggunakan struktur yang konsisten:
-
-```json
-{
-  "statusCode": 400,
-  "code": "VALIDATION_ERROR",
-  "message": "Request validation failed",
-  "details": {
-    "fields": [
-      {
-        "field": "profile.email",
-        "messages": ["email must be an email"]
-      }
-    ]
-  },
-  "timestamp": "2026-01-01T00:00:00.000Z",
-  "path": "/api/v1/example"
-}
-```
-
-Error code awal yang tersedia:
-
-- `VALIDATION_ERROR`
-- `BAD_REQUEST`
-- `UNAUTHENTICATED`
-- `FORBIDDEN`
-- `RESOURCE_NOT_FOUND`
-- `CONFLICT`
-- `TOO_MANY_REQUESTS`
-- `INTERNAL_ERROR`
-
-Unexpected error menggunakan pesan generik dan tidak mengekspos stack trace
-atau pesan internal. Penjelasan lengkap tersedia di
-[Dokumentasi Error Contract](docs/api/error-contract.md).
-
-## Pengujian
-
-Unit test mencakup 85 skenario untuk fondasi aplikasi, authentication,
-pagination, mapper response, query join, Project service, Task service, dan
-invalidation ordering. E2E mencakup 60 skenario menggunakan PostgreSQL,
-bcrypt, JWT, Passport, TypeORM, migration, ownership, CRUD, filtering,
-pagination, sorting, Project Detail, dan cascade deletion yang sebenarnya.
-
-```bash
-npm test
-npm run test:cov
-npm run test:e2e
-npm run test:e2e -- --testPathPatterns=auth.e2e-spec.ts
-npm run test:e2e -- --testPathPatterns=projects.e2e-spec.ts
-npm run test:e2e -- --testPathPatterns=tasks.e2e-spec.ts
-npm run test:e2e -- --testPathPatterns=ownership.e2e-spec.ts
-```
-
-Setiap E2E suite membuat Nest application sendiri dan menutupnya dengan
-`await app.close()`.
+Salin nilai `.env.example` ke konfigurasi lokal dan ganti seluruh credential
+development sebelum penggunaan non-lokal. Jangan commit file `.env`.
 
 ## Environment Variables
 
-| Variable                 | Default                 | Keterangan                                                     |
-| ------------------------ | ----------------------- | -------------------------------------------------------------- |
-| `NODE_ENV`               | `development`           | Pilihan: `development`, `test`, atau `production`              |
-| `PORT`                   | `3000`                  | Integer dalam rentang port TCP `1-65535`                       |
-| `API_PREFIX`             | `api/v1`                | Prefix non-empty; slash di awal dan akhir dinormalisasi        |
-| `DATABASE_HOST`          | `localhost`             | Host PostgreSQL                                                |
-| `DATABASE_PORT`          | `5432`                  | Port PostgreSQL                                                |
-| `DATABASE_USER`          | `postgres`              | User lokal PostgreSQL                                          |
-| `DATABASE_PASSWORD`      | `postgres`              | Password lokal; jangan digunakan sebagai credential production |
-| `DATABASE_NAME`          | `nestjs_challenge`      | Database development                                           |
-| `DATABASE_TEST_NAME`     | `nestjs_challenge_test` | Database test yang wajib berbeda                               |
-| `DATABASE_POOL_MAX`      | `10`                    | Batas pool antara `1-50`                                       |
-| `DATABASE_SSL`           | `false`                 | Boolean eksplisit `true` atau `false`                          |
-| `JWT_SECRET`             | Tidak ada               | Signing secret minimal 32 karakter; wajib dikonfigurasi        |
-| `JWT_EXPIRES_IN_SECONDS` | `900`                   | Masa berlaku access token, maksimum 86400 detik                |
+| Variable                    | Default                 | Keterangan                                                |
+| --------------------------- | ----------------------- | --------------------------------------------------------- |
+| `NODE_ENV`                  | `development`           | `development`, `test`, atau `production`                  |
+| `PORT`                      | `3000`                  | Port aplikasi                                             |
+| `API_PREFIX`                | `api/v1`                | Prefix endpoint bisnis                                    |
+| `DATABASE_HOST`             | `localhost`             | Host PostgreSQL                                           |
+| `DATABASE_PORT`             | `5432`                  | Port PostgreSQL                                           |
+| `DATABASE_USER`             | `postgres`              | User PostgreSQL lokal                                     |
+| `DATABASE_PASSWORD`         | `postgres`              | Password lokal, bukan credential production               |
+| `DATABASE_NAME`             | `nestjs_challenge`      | Database development                                      |
+| `DATABASE_TEST_NAME`        | `nestjs_challenge_test` | Database test yang wajib berbeda                          |
+| `DATABASE_POOL_MAX`         | `10`                    | Batas pool PostgreSQL                                     |
+| `DATABASE_SSL`              | `false`                 | Boolean eksplisit                                         |
+| `JWT_SECRET`                | wajib                   | Signing secret minimal 32 karakter                        |
+| `JWT_EXPIRES_IN_SECONDS`    | `900`                   | Masa berlaku access token                                 |
+| `LOG_LEVEL`                 | `info`                  | Level Pino                                                |
+| `LOG_PRETTY`                | `false`                 | Pretty log hanya efektif pada development                 |
+| `CORS_ORIGINS`              | `http://localhost:3000` | Daftar origin dipisahkan koma                             |
+| `REQUEST_BODY_LIMIT`        | `100kb`                 | Batas JSON dan URL-encoded body                           |
+| `AUTH_THROTTLE_LIMIT`       | `10`                    | Maksimum request auth dalam window                        |
+| `AUTH_THROTTLE_TTL_SECONDS` | `60`                    | Window throttling                                         |
+| `REDIS_HOST`                | `localhost`             | Host Redis                                                |
+| `REDIS_PORT`                | `6379`                  | Port Redis                                                |
+| `REDIS_PASSWORD`            | kosong                  | Hanya boleh kosong untuk Redis lokal yang tidak terekspos |
+| `REDIS_TLS`                 | `false`                 | Boolean eksplisit                                         |
+| `REDIS_CONNECT_TIMEOUT_MS`  | `2000`                  | Timeout koneksi Redis                                     |
+| `REDIS_NAMESPACE`           | `nestjs-challenge`      | Prefix dasar aman; environment ditambahkan otomatis       |
+| `CACHE_ENABLED`             | `false`                 | Mengaktifkan Project Detail cache                         |
+| `CACHE_TTL_SECONDS`         | `300`                   | TTL Project Detail                                        |
+| `QUEUE_ENABLED`             | `false`                 | Mengaktifkan queue dan worker aktivitas Task              |
 
-Konfigurasi gagal dimuat lebih awal jika nilainya tidak valid.
+## Pengujian
 
-## Script npm
-
-| Script                     | Fungsi                                        |
-| -------------------------- | --------------------------------------------- |
-| `npm run start`            | Menjalankan aplikasi                          |
-| `npm run start:dev`        | Menjalankan aplikasi dalam watch mode         |
-| `npm run start:debug`      | Menjalankan aplikasi dalam debug watch mode   |
-| `npm run start:prod`       | Menjalankan hasil build                       |
-| `npm run build`            | Membuat production build                      |
-| `npm run typecheck`        | Memeriksa TypeScript tanpa menghasilkan file  |
-| `npm run lint`             | Memeriksa source dan test tanpa mengubah file |
-| `npm run lint:fix`         | Menerapkan perbaikan lint yang aman           |
-| `npm run format`           | Memformat file yang dikelola Prettier         |
-| `npm run format:check`     | Memeriksa format tanpa mengubah file          |
-| `npm run test`             | Menjalankan unit test                         |
-| `npm run test:watch`       | Menjalankan unit test dalam watch mode        |
-| `npm run test:cov`         | Menjalankan unit test dengan laporan coverage |
-| `npm run test:debug`       | Menjalankan unit test dalam debug mode        |
-| `npm run test:e2e`         | Menjalankan E2E test                          |
-| `npm run migration:show`   | Menampilkan status migration                  |
-| `npm run migration:run`    | Menjalankan migration pending                 |
-| `npm run migration:revert` | Membatalkan migration terakhir                |
-| `npm run database:start`   | Menjalankan service PostgreSQL                |
-| `npm run database:stop`    | Menghentikan service PostgreSQL               |
-
-## Struktur Proyek
-
-```text
-.
-|-- docs/planning/
-|-- docs/api/
-|-- docs/database/
-|-- src/
-|   |-- common/
-|   |-- auth/
-|   |-- config/
-|   |-- database/
-|   |-- projects/
-|   |-- tasks/
-|   |-- users/
-|   |-- app.controller.ts
-|   |-- app.module.ts
-|   |-- app.service.ts
-|   |-- app.setup.ts
-|   `-- main.ts
-|-- test/
-|-- .env.example
-|-- package.json
-`-- tsconfig.json
+```bash
+npm run format:check
+npm run lint
+npm run typecheck
+npm run build
+npm test
+npm run test:cov
+npm run test:e2e
+npm run test:e2e -- --detectOpenHandles
+npm run test:integration -- --detectOpenHandles --verbose
 ```
 
-## Dokumen Perencanaan
+Unit test mencakup konfigurasi, request ID, logging, health, authentication,
+Project, Task, cache invalidation, dan validasi payload aktivitas. E2E
+menggunakan PostgreSQL nyata. Integration test cache dan queue menggunakan
+Redis nyata serta membersihkan hanya key yang dimiliki suite.
 
-- [Error Contract](docs/api/error-contract.md)
+Hasil validasi Batch 6 saat ini adalah 100 unit test, 66 E2E test, dan 8 Redis
+integration test.
+
+Setiap Nest E2E application ditutup dengan `await app.close()`. Integration
+test juga menutup Redis client, Queue, Worker, QueueEvents, timer observasi,
+dan testing module secara deterministik.
+
+## Dokumentasi
+
 - [Authentication](docs/api/authentication.md)
+- [Error Contract](docs/api/error-contract.md)
 - [Project dan Task](docs/api/projects-and-tasks.md)
+- [Runtime dan Operasional](docs/operations/runtime.md)
 - [Database Schema](docs/database/schema.md)
 - [Scope](docs/planning/scope.md)
 - [Domain Rules](docs/planning/domain-rules.md)
