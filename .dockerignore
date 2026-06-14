@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+docs
+test
+scripts
+*.log
+tmp
+temp
+.vscode

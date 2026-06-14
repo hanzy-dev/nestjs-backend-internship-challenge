@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test -- --runInBand
+      - run: npm run test:cov -- --runInBand
+      - run: npm run docs:validate
+
+  e2e:
+    name: PostgreSQL E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nestjs_challenge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nestjs_challenge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_HOST: localhost
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: nestjs_challenge
+      DATABASE_TEST_NAME: postgres
+      DATABASE_POOL_MAX: 5
+      DATABASE_SSL: 'false'
+      JWT_SECRET: test-only-jwt-secret-with-at-least-32-characters
+      JWT_EXPIRES_IN_SECONDS: 900
+      LOG_LEVEL: silent
+      LOG_PRETTY: 'false'
+      CORS_ORIGINS: http://allowed.example
+      REQUEST_BODY_LIMIT: 10kb
+      AUTH_THROTTLE_LIMIT: 100
+      AUTH_THROTTLE_TTL_SECONDS: 60
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ''
+      REDIS_TLS: 'false'
+      REDIS_CONNECT_TIMEOUT_MS: 500
+      REDIS_NAMESPACE: nestjs-challenge
+      CACHE_ENABLED: 'false'
+      CACHE_TTL_SECONDS: 60
+      QUEUE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run migrations explicitly
+        run: npm run migration:run
+      - run: npm run test:e2e -- --detectOpenHandles
+
+  redis-integration:
+    name: Redis and BullMQ integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ''
+      REDIS_TLS: 'false'
+      REDIS_CONNECT_TIMEOUT_MS: 1000
+      REDIS_NAMESPACE: nestjs-challenge-ci
+      CACHE_ENABLED: 'true'
+      CACHE_TTL_SECONDS: 60
+      QUEUE_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration -- --detectOpenHandles
+
+  docker:
+    name: Docker and Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose
+        run: docker compose -f compose.yml config
+      - name: Build runtime image
+        run: docker build --tag nestjs-challenge:ci .
