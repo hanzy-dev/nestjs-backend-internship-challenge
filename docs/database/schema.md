@@ -60,7 +60,7 @@ Nama tabel aktual adalah `users`, `projects`, dan `tasks`.
 | `created_at`    | `timestamptz`  | Tidak | Default waktu database                          |
 | `updated_at`    | `timestamptz`  | Tidak | Dikelola TypeORM saat update                    |
 
-Normalisasi email dan password hashing akan diterapkan pada batch Auth.
+Normalisasi email dan password hashing diterapkan pada Batch 4.
 
 ## Tabel Projects
 
@@ -140,7 +140,7 @@ object induk dan menghapus enum setelah tabel dependennya hilang.
 
 ## Keterbatasan Saat Ini
 
-- Belum ada registration, login, JWT, atau password hashing.
+- Registration, login, JWT, dan password hashing tersedia sejak Batch 4.
 - Belum ada Project dan Task CRUD.
 - Belum ada ownership authorization.
 - Belum ada soft delete atau audit history.
