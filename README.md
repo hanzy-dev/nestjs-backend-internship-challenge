@@ -2,11 +2,11 @@
 
 REST API modular untuk authentication, Project, dan Task dengan PostgreSQL,
 JWT ownership, structured logging, Redis cache-aside, BullMQ, dokumentasi
-OpenAPI/Postman, container delivery, dan quality gates.
+OpenAPI/Postman, Docker, dan quality checks.
 
 ## Status
 
-**Fast-track Batch 7 — API Documentation and Delivery**
+**Final - Submission Ready**
 
 ## Cakupan Requirement
 
@@ -22,10 +22,8 @@ OpenAPI/Postman, container delivery, dan quality gates.
 - Swagger/OpenAPI dan Postman;
 - multi-stage Docker image dan unified Compose;
 - GitHub Actions untuk quality, E2E, integration, dan Docker;
-- architecture overview dan ADR.
-
-Seed/demo data, Loom, submission material, refresh token, RBAC, microservices,
-dan cloud deployment belum diimplementasikan.
+- architecture overview dan ADR;
+- demo data lokal yang aman dan demo verification.
 
 ## Teknologi
 
@@ -64,6 +62,16 @@ docker compose -f compose.yml down
 Nilai Compose adalah credential lokal aman untuk evaluator, bukan konfigurasi
 production. Ganti `JWT_SECRET` dan credential database untuk penggunaan
 non-lokal.
+
+## Pemenuhan Challenge
+
+- Related CRUD: Project CRUD dan nested Task CRUD.
+- PostgreSQL: data disimpan di PostgreSQL dengan TypeORM migration.
+- JWT authentication: register, login, JWT guard, dan `/auth/me`.
+- E2E token testing: skenario token hilang, malformed, invalid, expired, user
+  hilang, dan token valid.
+- Modular Layered Architecture: Controller -> Service -> Repository.
+- Swagger dan Postman documentation tersedia untuk mencoba API.
 
 ## Development Lokal
 
@@ -143,6 +151,36 @@ Validasi:
 ```bash
 npm run docs:validate
 ```
+
+## Demo Lokal
+
+Demo data tidak dibuat otomatis saat aplikasi startup. Jalankan migration dan
+pastikan aplikasi, PostgreSQL, serta Redis sudah berjalan.
+
+Seed demo data:
+
+```bash
+DEMO_USER_PASSWORD=<password-lokal> npm run demo:seed
+```
+
+Opsional: set `DEMO_USER_EMAIL` untuk mengganti email default
+`demo.backend@example.test`. Tidak ada default password.
+
+Verifikasi demo melalui public HTTP API:
+
+```bash
+DEMO_USER_PASSWORD=<password-lokal> npm run demo:verify
+```
+
+Reset demo data lokal:
+
+```bash
+DEMO_RESET_CONFIRM=RESET_LOCAL_DEMO_DATA npm run demo:reset
+```
+
+Reset hanya menghapus demo user dan Project/Task milik demo user. Command ini
+menolak production, tidak melakukan truncate, tidak menghapus migration table,
+dan tidak memakai Redis `FLUSHALL` atau `FLUSHDB`.
 
 ## Endpoint
 
@@ -302,12 +340,10 @@ source of truth. Throttling masih in-memory per instance.
 - tidak ada transactional outbox;
 - tidak ada distributed tracing;
 - tidak ada complex RBAC;
-- tidak ada production secret-management system;
-- tidak ada seed/demo data pada Batch 7.
+- tidak ada production secret-management system.
 
 ## Future Improvements
 
-Batch berikutnya dapat menambahkan seed/demo data dan submission material.
 Untuk production, pertimbangkan secret manager, distributed throttling,
 transactional outbox, tracing, backup/restore, dan deployment platform
 terkelola.
