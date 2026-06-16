@@ -2,7 +2,7 @@
   "name": "nestjs-backend-internship-challenge",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": "Muhammad Farhan",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -25,6 +25,9 @@
     "test:integration": "jest --config ./test/jest-integration.json --runInBand",
     "verify": "npm run build && npm run format:check && npm run lint && npm run typecheck && npm test -- --runInBand && npm run docs:validate",
     "verify:full": "npm run verify && npm run test:cov -- --runInBand && npm run test:e2e -- --detectOpenHandles && npm run test:integration -- --detectOpenHandles",
+    "demo:seed": "npm run build && node dist/database/demo/seed-demo.js",
+    "demo:reset": "npm run build && node dist/database/demo/reset-demo.js",
+    "demo:verify": "node scripts/verify-demo.mjs",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate src/database/migrations/InitialSchema -d src/database/data-source.ts",
     "migration:create": "npm run typeorm -- migration:create src/database/migrations/NewMigration",
