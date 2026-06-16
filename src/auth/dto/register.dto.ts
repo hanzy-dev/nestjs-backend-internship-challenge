@@ -5,7 +5,7 @@ import { normalizeEmail } from '../../users/email-normalizer';
 import { MaxUtf8ByteLength } from '../validation/max-utf8-byte-length.validator';
 
 export class RegisterDto {
-  @ApiProperty({ minLength: 2, maxLength: 120, example: 'Hanzy Developer' })
+  @ApiProperty({ minLength: 2, maxLength: 120, example: 'Demo User' })
   @Transform(({ value }: TransformFnParams) => trimString(value))
   @IsString()
   @MinLength(2)

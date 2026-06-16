@@ -7,7 +7,7 @@ export class UserResponseModel {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: 'Hanzy Developer' })
+  @ApiProperty({ example: 'Demo User' })
   name!: string;
 
   @ApiProperty({ format: 'email', example: 'hanzy@example.com' })
